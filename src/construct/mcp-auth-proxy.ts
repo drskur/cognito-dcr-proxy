@@ -130,6 +130,7 @@ export class McpAuthProxy extends Construct {
     const protectedResourceFn = makeFn('ProtectedResourceFn', 'protected-resource-metadata.ts');
     const authServerFn = makeFn('AuthServerFn', 'authorization-server-metadata.ts');
     const registerFn = makeFn('RegisterFn', 'register.ts');
+    const authorizeFn = makeFn('AuthorizeFn', 'authorize.ts');
     const tokenFn = makeFn('TokenFn', 'token.ts');
 
     clientSecret.grantRead(tokenFn);
@@ -190,6 +191,12 @@ export class McpAuthProxy extends Construct {
       path: '/register',
       methods: [apigwv2.HttpMethod.POST],
       integration: new integrations.HttpLambdaIntegration('RegisterInt', registerFn),
+    });
+
+    this.httpApi.addRoutes({
+      path: '/authorize',
+      methods: [apigwv2.HttpMethod.GET],
+      integration: new integrations.HttpLambdaIntegration('AuthorizeInt', authorizeFn),
     });
 
     this.httpApi.addRoutes({

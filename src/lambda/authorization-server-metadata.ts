@@ -18,12 +18,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const proxyUrl = `https://${event.requestContext.domainName}`;
   const upstream = await fetchUpstream();
 
-  // Override only the proxy-handled endpoints.
-  // authorization_endpoint and jwks_uri are kept as Cognito URLs so that
-  // Hosted UI and JWT verification continue to work directly against Cognito.
-  // issuer is kept as Cognito's so JWT.iss validation matches.
+  // Override the proxy-handled endpoints.
+  // jwks_uri is kept as Cognito's so JWT verification works directly against
+  // Cognito. issuer is kept as Cognito's so JWT.iss validation matches.
+  // authorization_endpoint points to the proxy so we can strip the RFC 8707
+  // `resource` parameter that some MCP clients send (Cognito rejects token
+  // exchange for unregistered resource server URLs).
   const metadata = {
     ...upstream,
+    authorization_endpoint: `${proxyUrl}/authorize`,
     token_endpoint: `${proxyUrl}/oauth/token`,
     registration_endpoint: `${proxyUrl}/register`,
   };

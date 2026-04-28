@@ -28,7 +28,7 @@ describe('authorization-server-metadata', () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => upstream });
   });
 
-  test('overrides token_endpoint and registration_endpoint to proxy URL', async () => {
+  test('overrides authorization_endpoint, token_endpoint and registration_endpoint to proxy URL', async () => {
     const { handler } = await import('../../src/lambda/authorization-server-metadata');
     const res = (await handler(event('proxy.example.com'), ctx, cb)) as {
       statusCode: number;
@@ -36,11 +36,12 @@ describe('authorization-server-metadata', () => {
     };
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
+    expect(body.authorization_endpoint).toBe('https://proxy.example.com/authorize');
     expect(body.token_endpoint).toBe('https://proxy.example.com/oauth/token');
     expect(body.registration_endpoint).toBe('https://proxy.example.com/register');
   });
 
-  test('preserves Cognito-issued fields (issuer, authorization_endpoint, jwks_uri)', async () => {
+  test('preserves Cognito-issued fields (issuer, jwks_uri)', async () => {
     const { handler } = await import('../../src/lambda/authorization-server-metadata');
     const res = (await handler(event('proxy.example.com'), ctx, cb)) as {
       statusCode: number;
@@ -48,7 +49,6 @@ describe('authorization-server-metadata', () => {
     };
     const body = JSON.parse(res.body);
     expect(body.issuer).toBe(upstream.issuer);
-    expect(body.authorization_endpoint).toBe(upstream.authorization_endpoint);
     expect(body.jwks_uri).toBe(upstream.jwks_uri);
   });
 

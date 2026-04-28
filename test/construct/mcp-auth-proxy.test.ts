@@ -15,7 +15,7 @@ function makeStack() {
 }
 
 describe('McpAuthProxy', () => {
-  test('creates one http api, one secret, four routes', () => {
+  test('creates one http api, one secret, seven routes', () => {
     const { stack, userPool, client, domain } = makeStack();
     new McpAuthProxy(stack, 'Proxy', {
       userPool,
@@ -27,17 +27,17 @@ describe('McpAuthProxy', () => {
 
     const t = Template.fromStack(stack);
     t.resourceCountIs('AWS::ApiGatewayV2::Api', 1);
-    t.resourceCountIs('AWS::ApiGatewayV2::Route', 6);
+    t.resourceCountIs('AWS::ApiGatewayV2::Route', 7);
     t.resourceCountIs('AWS::SecretsManager::Secret', 1);
 
     // Filter by ARM64 + nodejs20.x to exclude Cognito custom-resource lambdas.
     const proxyLambdas = t.findResources('AWS::Lambda::Function', {
       Properties: { Runtime: 'nodejs20.x', Architectures: ['arm64'] },
     });
-    expect(Object.keys(proxyLambdas)).toHaveLength(5);
+    expect(Object.keys(proxyLambdas)).toHaveLength(6);
   });
 
-  test('all four oauth routes are present', () => {
+  test('all oauth routes are present', () => {
     const { stack, userPool, client, domain } = makeStack();
     new McpAuthProxy(stack, 'Proxy', {
       userPool,
@@ -52,6 +52,7 @@ describe('McpAuthProxy', () => {
       'GET /.well-known/oauth-authorization-server',
       'GET /.well-known/openid-configuration',
       'POST /register',
+      'GET /authorize',
       'POST /oauth/token',
       'ANY /mcp',
     ]) {
