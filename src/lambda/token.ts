@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import type { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import {
   SecretsManagerClient,
@@ -71,6 +72,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     code_prefix: code.slice(0, 8),
     code_length: code.length,
     verifier_length: verifier.length,
+    verifier_sha256: verifier
+      ? createHash('sha256').update(verifier).digest('base64url')
+      : null,
     redirect_uri: params.get('redirect_uri'),
   });
 
