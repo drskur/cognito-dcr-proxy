@@ -61,6 +61,19 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   // and Cognito has been observed to reject the exchange when present.
   params.delete('resource');
 
+  const code = params.get('code') ?? '';
+  const verifier = params.get('code_verifier') ?? '';
+  console.log('[token] forwarding to cognito', {
+    endpoint: `${COGNITO_HOSTED_UI_BASE}/oauth2/token`,
+    keys: Array.from(params.keys()).sort(),
+    has_client_secret: params.has('client_secret'),
+    client_id_last4: COGNITO_CLIENT_ID.slice(-4),
+    code_prefix: code.slice(0, 8),
+    code_length: code.length,
+    verifier_length: verifier.length,
+    redirect_uri: params.get('redirect_uri'),
+  });
+
   const res = await fetch(`${COGNITO_HOSTED_UI_BASE}/oauth2/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
