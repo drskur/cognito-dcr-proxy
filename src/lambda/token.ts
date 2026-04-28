@@ -57,6 +57,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   params.set('client_id', COGNITO_CLIENT_ID);
   params.set('client_secret', await getClientSecret());
 
+  // Cognito does not understand RFC 8707 `resource`; some MCP clients send it
+  // and Cognito has been observed to reject the exchange when present.
+  params.delete('resource');
+
   const res = await fetch(`${COGNITO_HOSTED_UI_BASE}/oauth2/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -66,7 +70,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const responseBody = await res.text();
   console.log('[token] cognito response', {
     status: res.status,
-    body: responseBody.slice(0, 500),
+    body: responseBody,
+    errorType: res.headers.get('x-amzn-errortype'),
+    requestId: res.headers.get('x-amzn-requestid'),
+    wwwAuthenticate: res.headers.get('www-authenticate'),
   });
 
   return {
