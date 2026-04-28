@@ -27,7 +27,7 @@ describe('McpAuthProxy', () => {
 
     const t = Template.fromStack(stack);
     t.resourceCountIs('AWS::ApiGatewayV2::Api', 1);
-    t.resourceCountIs('AWS::ApiGatewayV2::Route', 5);
+    t.resourceCountIs('AWS::ApiGatewayV2::Route', 6);
     t.resourceCountIs('AWS::SecretsManager::Secret', 1);
 
     // Filter by ARM64 + nodejs20.x to exclude Cognito custom-resource lambdas.
@@ -50,6 +50,7 @@ describe('McpAuthProxy', () => {
     for (const route of [
       'GET /.well-known/oauth-protected-resource',
       'GET /.well-known/oauth-authorization-server',
+      'GET /.well-known/openid-configuration',
       'POST /register',
       'POST /oauth/token',
       'ANY /mcp',

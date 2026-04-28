@@ -181,6 +181,12 @@ export class McpAuthProxy extends Construct {
     });
 
     this.httpApi.addRoutes({
+      path: '/.well-known/openid-configuration',
+      methods: [apigwv2.HttpMethod.GET],
+      integration: new integrations.HttpLambdaIntegration('OpenIdConfigInt', authServerFn),
+    });
+
+    this.httpApi.addRoutes({
       path: '/register',
       methods: [apigwv2.HttpMethod.POST],
       integration: new integrations.HttpLambdaIntegration('RegisterInt', registerFn),
