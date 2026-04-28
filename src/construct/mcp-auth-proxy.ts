@@ -25,7 +25,13 @@ export interface McpAuthProxyProps {
   readonly userPoolClient: cognito.IUserPoolClient;
   readonly cognitoDomain: cognito.UserPoolDomain;
 
-  readonly resourceUri: string;
+  /**
+   * Full URL of the upstream MCP server (e.g. AgentCore Gateway endpoint).
+   * The proxy forwards requests on its `/mcp` path to this URL and rewrites
+   * the upstream `WWW-Authenticate` header so MCP clients discover this
+   * proxy as the protected-resource metadata host.
+   */
+  readonly upstreamUrl: string;
 
   readonly allowedRedirectPatterns?: RegExp[];
 
@@ -36,6 +42,13 @@ export interface McpAuthProxyProps {
   readonly lambdaEnvironment?: Record<string, string>;
   readonly logRetention?: logs.RetentionDays;
   readonly removalPolicy?: RemovalPolicy;
+
+  /**
+   * Timeout applied to the MCP proxy Lambda. Defaults to 29 seconds (the
+   * API Gateway HTTP API integration limit).
+   */
+  readonly mcpProxyTimeout?: Duration;
+  readonly mcpProxyMemorySize?: number;
 }
 
 const DEFAULT_CORS_HEADERS = ['authorization', 'content-type', 'mcp-protocol-version'];
@@ -49,6 +62,7 @@ const entry = (file: string): string => path.join(LAMBDA_DIR, file);
 export class McpAuthProxy extends Construct {
   readonly httpApi: apigwv2.HttpApi;
   readonly proxyUrl: string;
+  readonly mcpUrl: string;
   readonly metadataUrl: string;
   readonly authServerMetadataUrl: string;
   readonly tokenEndpoint: string;
@@ -76,14 +90,17 @@ export class McpAuthProxy extends Construct {
       COGNITO_ISSUER: cognitoIssuer,
       COGNITO_HOSTED_UI_BASE: hostedUiBase,
       COGNITO_REGION: region,
-      RESOURCE_URI: props.resourceUri,
       ALLOWED_REDIRECT_PATTERNS: JSON.stringify(
         (props.allowedRedirectPatterns ?? []).map((r) => r.source),
       ),
       ...(props.lambdaEnvironment ?? {}),
     };
 
-    const makeFn = (id_: string, file: string): nodejs.NodejsFunction => {
+    const makeFn = (
+      id_: string,
+      file: string,
+      overrides?: Partial<nodejs.NodejsFunctionProps>,
+    ): nodejs.NodejsFunction => {
       const logGroup = new logs.LogGroup(this, `${id_}LogGroup`, {
         retention: logRetentionDefault,
         removalPolicy: removalPolicyDefault,
@@ -106,6 +123,7 @@ export class McpAuthProxy extends Construct {
           sourceMap: true,
           externalModules: ['@aws-sdk/*'],
         },
+        ...overrides,
       });
     };
 
@@ -124,6 +142,7 @@ export class McpAuthProxy extends Construct {
             allowMethods: [
               apigwv2.CorsHttpMethod.GET,
               apigwv2.CorsHttpMethod.POST,
+              apigwv2.CorsHttpMethod.DELETE,
               apigwv2.CorsHttpMethod.OPTIONS,
             ],
             allowHeaders: props.cors?.allowHeaders ?? DEFAULT_CORS_HEADERS,
@@ -141,6 +160,13 @@ export class McpAuthProxy extends Construct {
       throttlingRateLimit: props.throttling?.rateLimit ?? DEFAULT_RATE_LIMIT,
       throttlingBurstLimit: props.throttling?.burstLimit ?? DEFAULT_BURST_LIMIT,
     };
+
+    this.proxyUrl = this.httpApi.apiEndpoint;
+    this.mcpUrl = `${this.proxyUrl}/mcp`;
+    this.metadataUrl = `${this.proxyUrl}/.well-known/oauth-protected-resource`;
+    this.authServerMetadataUrl = `${this.proxyUrl}/.well-known/oauth-authorization-server`;
+    this.tokenEndpoint = `${this.proxyUrl}/oauth/token`;
+    this.registrationEndpoint = `${this.proxyUrl}/register`;
 
     this.httpApi.addRoutes({
       path: '/.well-known/oauth-protected-resource',
@@ -166,10 +192,20 @@ export class McpAuthProxy extends Construct {
       integration: new integrations.HttpLambdaIntegration('TokenInt', tokenFn),
     });
 
-    this.proxyUrl = this.httpApi.apiEndpoint;
-    this.metadataUrl = `${this.proxyUrl}/.well-known/oauth-protected-resource`;
-    this.authServerMetadataUrl = `${this.proxyUrl}/.well-known/oauth-authorization-server`;
-    this.tokenEndpoint = `${this.proxyUrl}/oauth/token`;
-    this.registrationEndpoint = `${this.proxyUrl}/register`;
+    const mcpProxyFn = makeFn('McpProxyFn', 'mcp-proxy.ts', {
+      timeout: props.mcpProxyTimeout ?? Duration.seconds(29),
+      memorySize: props.mcpProxyMemorySize ?? 512,
+      environment: {
+        ...baseEnv,
+        UPSTREAM_URL: props.upstreamUrl,
+        PROXY_METADATA_URL: this.metadataUrl,
+      },
+    });
+
+    this.httpApi.addRoutes({
+      path: '/mcp',
+      methods: [apigwv2.HttpMethod.ANY],
+      integration: new integrations.HttpLambdaIntegration('McpProxyInt', mcpProxyFn),
+    });
   }
 }

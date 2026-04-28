@@ -21,20 +21,20 @@ describe('McpAuthProxy', () => {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://example.com/mcp',
+      upstreamUrl: 'https://example.com/mcp',
       allowedRedirectPatterns: [/^http:\/\/localhost:\d+\/callback$/],
     });
 
     const t = Template.fromStack(stack);
     t.resourceCountIs('AWS::ApiGatewayV2::Api', 1);
-    t.resourceCountIs('AWS::ApiGatewayV2::Route', 4);
+    t.resourceCountIs('AWS::ApiGatewayV2::Route', 5);
     t.resourceCountIs('AWS::SecretsManager::Secret', 1);
 
     // Filter by ARM64 + nodejs20.x to exclude Cognito custom-resource lambdas.
     const proxyLambdas = t.findResources('AWS::Lambda::Function', {
       Properties: { Runtime: 'nodejs20.x', Architectures: ['arm64'] },
     });
-    expect(Object.keys(proxyLambdas)).toHaveLength(4);
+    expect(Object.keys(proxyLambdas)).toHaveLength(5);
   });
 
   test('all four oauth routes are present', () => {
@@ -43,7 +43,7 @@ describe('McpAuthProxy', () => {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://example.com/mcp',
+      upstreamUrl: 'https://example.com/mcp',
     });
     const t = Template.fromStack(stack);
 
@@ -52,6 +52,7 @@ describe('McpAuthProxy', () => {
       'GET /.well-known/oauth-authorization-server',
       'POST /register',
       'POST /oauth/token',
+      'ANY /mcp',
     ]) {
       t.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: route });
     }
@@ -63,7 +64,7 @@ describe('McpAuthProxy', () => {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://example.com/mcp',
+      upstreamUrl: 'https://example.com/mcp',
     });
     Template.fromStack(stack).hasResourceProperties('AWS::ApiGatewayV2::Stage', {
       DefaultRouteSettings: {
@@ -79,7 +80,7 @@ describe('McpAuthProxy', () => {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://example.com/mcp',
+      upstreamUrl: 'https://example.com/mcp',
       cors: false,
     });
     Template.fromStack(stack).hasResourceProperties('AWS::ApiGatewayV2::Api', {
@@ -93,7 +94,7 @@ describe('McpAuthProxy', () => {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://example.com/mcp',
+      upstreamUrl: 'https://example.com/mcp',
     });
     Template.fromStack(stack).hasResourceProperties('AWS::ApiGatewayV2::Api', {
       CorsConfiguration: Match.objectLike({
@@ -108,7 +109,7 @@ describe('McpAuthProxy', () => {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://example.com/mcp',
+      upstreamUrl: 'https://example.com/mcp',
       throttling: { rateLimit: 5, burstLimit: 10 },
     });
     Template.fromStack(stack).hasResourceProperties('AWS::ApiGatewayV2::Stage', {
