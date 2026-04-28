@@ -1,6 +1,6 @@
 {
   "name": "@drskur/dcr-proxy",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "description": "MCP-compatible OAuth proxy (Dynamic Client Registration) for Amazon Cognito, packaged as a CDK construct.",
   "license": "MIT",
   "author": "drskur <drskur@gmail.com>",

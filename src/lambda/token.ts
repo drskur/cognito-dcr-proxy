@@ -42,6 +42,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   const params = new URLSearchParams(rawBody);
 
+  const incomingKeys = Array.from(params.keys()).sort();
+  console.log('[token] incoming params', {
+    keys: incomingKeys,
+    grant_type: params.get('grant_type'),
+    has_code_verifier: params.has('code_verifier'),
+    redirect_uri: params.get('redirect_uri'),
+    client_id_in: params.get('client_id'),
+  });
+
   // Always force the real Cognito client_id and inject the server-side secret.
   // DCR returned the same client_id to every caller, but we re-assert here
   // to keep client_id/secret consistent regardless of what the caller sent.
@@ -55,6 +64,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   });
 
   const responseBody = await res.text();
+  console.log('[token] cognito response', {
+    status: res.status,
+    body: responseBody.slice(0, 500),
+  });
+
   return {
     statusCode: res.status,
     headers: {
