@@ -1,6 +1,6 @@
 {
   "name": "@drskur/dcr-proxy",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "MCP-compatible OAuth proxy (Dynamic Client Registration) for Amazon Cognito, packaged as a CDK construct.",
   "license": "MIT",
   "author": "drskur <drskur@gmail.com>",
@@ -15,10 +15,11 @@
   "scripts": {
     "build": "tsc",
     "typecheck:lambda": "tsc -p tsconfig.lambda.json",
-    "typecheck": "pnpm build && pnpm typecheck:lambda",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "pnpm build && pnpm typecheck:lambda && pnpm typecheck:test",
     "clean": "rm -rf dist",
-    "test": "echo \"no tests yet\" && exit 0",
-    "prepublishOnly": "pnpm clean && pnpm typecheck"
+    "test": "jest",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test"
   },
   "peerDependencies": {
     "aws-cdk-lib": "^2.150.0",
@@ -27,9 +28,14 @@
   "devDependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1038.0",
     "@types/aws-lambda": "^8.10.161",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.14.0",
     "aws-cdk-lib": "^2.150.0",
+    "aws-sdk-client-mock": "^4.1.0",
     "constructs": "^10.3.0",
+    "esbuild": "^0.28.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "typescript": "^5.5.0"
   },
   "publishConfig": {

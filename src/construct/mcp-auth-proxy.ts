@@ -9,6 +9,17 @@ import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 
+export interface CorsOptions {
+  readonly allowOrigins?: string[];
+  readonly allowHeaders?: string[];
+  readonly maxAge?: Duration;
+}
+
+export interface ThrottlingOptions {
+  readonly rateLimit?: number;
+  readonly burstLimit?: number;
+}
+
 export interface McpAuthProxyProps {
   readonly userPool: cognito.IUserPool;
   readonly userPoolClient: cognito.IUserPoolClient;
@@ -18,10 +29,18 @@ export interface McpAuthProxyProps {
 
   readonly allowedRedirectPatterns?: RegExp[];
 
+  readonly cors?: CorsOptions | false;
+  readonly throttling?: ThrottlingOptions;
+  readonly reservedConcurrentExecutions?: number;
+
   readonly lambdaEnvironment?: Record<string, string>;
   readonly logRetention?: logs.RetentionDays;
   readonly removalPolicy?: RemovalPolicy;
 }
+
+const DEFAULT_CORS_HEADERS = ['authorization', 'content-type', 'mcp-protocol-version'];
+const DEFAULT_RATE_LIMIT = 50;
+const DEFAULT_BURST_LIMIT = 100;
 
 const LAMBDA_DIR = path.join(__dirname, '..', '..', 'src', 'lambda');
 
@@ -39,10 +58,12 @@ export class McpAuthProxy extends Construct {
     super(scope, id);
 
     const region = Stack.of(this).region;
+    const logRetentionDefault = props.logRetention ?? logs.RetentionDays.ONE_WEEK;
+    const removalPolicyDefault = props.removalPolicy ?? RemovalPolicy.DESTROY;
 
     const clientSecret = new secretsmanager.Secret(this, 'CognitoClientSecret', {
       secretStringValue: props.userPoolClient.userPoolClientSecret,
-      removalPolicy: props.removalPolicy ?? RemovalPolicy.DESTROY,
+      removalPolicy: removalPolicyDefault,
     });
 
     const cognitoIssuer = `https://cognito-idp.${region}.amazonaws.com/${props.userPool.userPoolId}`;
@@ -62,10 +83,13 @@ export class McpAuthProxy extends Construct {
       ...(props.lambdaEnvironment ?? {}),
     };
 
-    const logRetention = props.logRetention ?? logs.RetentionDays.ONE_WEEK;
+    const makeFn = (id_: string, file: string): nodejs.NodejsFunction => {
+      const logGroup = new logs.LogGroup(this, `${id_}LogGroup`, {
+        retention: logRetentionDefault,
+        removalPolicy: removalPolicyDefault,
+      });
 
-    const makeFn = (id_: string, file: string): nodejs.NodejsFunction =>
-      new nodejs.NodejsFunction(this, id_, {
+      return new nodejs.NodejsFunction(this, id_, {
         entry: entry(file),
         handler: 'handler',
         runtime: lambda.Runtime.NODEJS_20_X,
@@ -73,7 +97,8 @@ export class McpAuthProxy extends Construct {
         timeout: Duration.seconds(10),
         memorySize: 256,
         environment: baseEnv,
-        logRetention,
+        logGroup,
+        reservedConcurrentExecutions: props.reservedConcurrentExecutions,
         bundling: {
           target: 'node20',
           format: nodejs.OutputFormat.CJS,
@@ -82,6 +107,7 @@ export class McpAuthProxy extends Construct {
           externalModules: ['@aws-sdk/*'],
         },
       });
+    };
 
     const protectedResourceFn = makeFn('ProtectedResourceFn', 'protected-resource-metadata.ts');
     const authServerFn = makeFn('AuthServerFn', 'authorization-server-metadata.ts');
@@ -90,10 +116,31 @@ export class McpAuthProxy extends Construct {
 
     clientSecret.grantRead(tokenFn);
 
+    const corsPreflight =
+      props.cors === false
+        ? undefined
+        : {
+            allowOrigins: props.cors?.allowOrigins ?? ['*'],
+            allowMethods: [
+              apigwv2.CorsHttpMethod.GET,
+              apigwv2.CorsHttpMethod.POST,
+              apigwv2.CorsHttpMethod.OPTIONS,
+            ],
+            allowHeaders: props.cors?.allowHeaders ?? DEFAULT_CORS_HEADERS,
+            maxAge: props.cors?.maxAge ?? Duration.minutes(10),
+          };
+
     this.httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: `${id}-mcp-auth-proxy`,
       description: 'MCP-compatible OAuth proxy for Amazon Cognito',
+      corsPreflight,
     });
+
+    const stage = this.httpApi.defaultStage!.node.defaultChild as apigwv2.CfnStage;
+    stage.defaultRouteSettings = {
+      throttlingRateLimit: props.throttling?.rateLimit ?? DEFAULT_RATE_LIMIT,
+      throttlingBurstLimit: props.throttling?.burstLimit ?? DEFAULT_BURST_LIMIT,
+    };
 
     this.httpApi.addRoutes({
       path: '/.well-known/oauth-protected-resource',
