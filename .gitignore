@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+cdk.out/
+.cdk.staging/
+examples/*/cdk.out/
+examples/*/cdk.context.json
+*.tsbuildinfo

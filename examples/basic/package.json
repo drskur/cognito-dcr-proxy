@@ -1,0 +1,21 @@
+{
+  "name": "basic-example",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy"
+  },
+  "dependencies": {
+    "@drskur/dcr-proxy": "workspace:*",
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "aws-cdk": "^2.150.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}

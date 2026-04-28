@@ -1,0 +1,39 @@
+{
+  "name": "@drskur/dcr-proxy",
+  "version": "0.1.0",
+  "description": "MCP-compatible OAuth proxy (Dynamic Client Registration) for Amazon Cognito, packaged as a CDK construct.",
+  "license": "MIT",
+  "author": "drskur <drskur@gmail.com>",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/lambda",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck:lambda": "tsc -p tsconfig.lambda.json",
+    "typecheck": "pnpm build && pnpm typecheck:lambda",
+    "clean": "rm -rf dist",
+    "test": "echo \"no tests yet\" && exit 0",
+    "prepublishOnly": "pnpm clean && pnpm typecheck"
+  },
+  "peerDependencies": {
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1038.0",
+    "@types/aws-lambda": "^8.10.161",
+    "@types/node": "^20.14.0",
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0",
+    "typescript": "^5.5.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.12.4"
+}
