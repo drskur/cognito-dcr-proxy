@@ -23,6 +23,7 @@ export class ExampleStack extends Stack {
           cognito.OAuthScope.OPENID,
           cognito.OAuthScope.PROFILE,
           cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.PHONE,
         ],
         callbackUrls: [
           'http://localhost:33418/callback',
