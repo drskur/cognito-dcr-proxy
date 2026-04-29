@@ -14,25 +14,29 @@ Lets MCP clients (Claude Code, Kiro CLI, MCP Inspector, ...) authenticate agains
 
 ```
 [MCP Client] ── DCR / token ──▶ [DCR Proxy] ── adds client_secret ──▶ [Cognito]
-     │                                                                    │
-     │                                                                    │
-     └────── browser auth (authorize) ──────────────────────────▶ [Cognito Hosted UI]
-                                                                          │
-     ◀──────────── code via redirect_uri ──────────────────────────────────┘
-
-     ── MCP request + Bearer JWT ──▶ [AgentCore Gateway] ── verifies via Cognito JWKS
+     │                                │
+     │                                └── strips RFC 8707 `resource` ──▶ [Cognito Hosted UI]
+     │
+     │ ── MCP request + Bearer JWT ──▶ [DCR Proxy /mcp] ──▶ [Upstream MCP Server]
+     │                                       │                      │
+     │                                       └── rewrites WWW-Authenticate ──┘
+     │                                          (advertises proxy as resource_metadata host)
+     ◀──────────── code via redirect_uri ──────────────────────────┘
 ```
 
-The proxy implements the four endpoints MCP clients need:
+The proxy implements the endpoints MCP clients need:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
 | `/.well-known/oauth-protected-resource` | GET | RFC 9728 — points clients at the authorization server |
-| `/.well-known/oauth-authorization-server` | GET | RFC 8414 — Cognito metadata with `token_endpoint` and `registration_endpoint` rewritten to the proxy |
+| `/.well-known/oauth-authorization-server` | GET | RFC 8414 — Cognito metadata with `authorization_endpoint`, `token_endpoint`, and `registration_endpoint` rewritten to the proxy |
+| `/.well-known/openid-configuration` | GET | OIDC discovery — same handler as the authorization-server metadata, for clients that probe the OIDC endpoint |
 | `/register` | POST | RFC 7591 — validates redirect URIs against an allow-list, returns the static Cognito `client_id` (no secret) |
-| `/oauth/token` | POST | Forwards the token request to Cognito after injecting the server-side `client_secret` |
+| `/authorize` | GET | Strips the RFC 8707 `resource` parameter and redirects (302) to Cognito Hosted UI |
+| `/oauth/token` | POST | Forwards the token request to Cognito after injecting the server-side `client_secret` and stripping the `resource` parameter |
+| `/mcp` | ANY | Forwards the request to `upstreamUrl` and rewrites `resource_metadata` in the upstream `WWW-Authenticate` header so MCP clients discover this proxy |
 
-The `authorization_endpoint` and `jwks_uri` are **not** proxied — clients hit Cognito Hosted UI and JWKS directly.
+The `jwks_uri` is **not** proxied — clients verify JWTs against Cognito JWKS directly.
 
 ## Install
 
@@ -64,10 +68,17 @@ export class MyStack extends Stack {
       oAuth: {
         flows: { authorizationCodeGrant: true },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.PROFILE, cognito.OAuthScope.EMAIL],
+        // Cognito enforces exact-match callback URLs. Register every redirect
+        // URI an MCP client may use, e.g.:
+        //   - Claude Code:    http://localhost:33418/callback
+        //   - MCP Inspector:  http://localhost:6274/oauth/callback
+        //   - Kiro CLI:       http://127.0.0.1:<port>  (port chosen per session;
+        //                     match the `oauth.redirectUri` set in the Kiro MCP
+        //                     config, e.g. "http://127.0.0.1:49153")
         callbackUrls: [
           'http://localhost:33418/callback',
           'http://localhost:6274/oauth/callback',
-          'http://127.0.0.1:33418/',
+          'http://127.0.0.1:49153',
         ],
       },
     });
@@ -80,7 +91,7 @@ export class MyStack extends Stack {
       userPool,
       userPoolClient: client,
       cognitoDomain: domain,
-      resourceUri: 'https://my-gateway.bedrock-agentcore.amazonaws.com/mcp',
+      upstreamUrl: 'https://my-gateway.bedrock-agentcore.amazonaws.com/mcp',
       allowedRedirectPatterns: [
         /^http:\/\/localhost:\d+\/callback$/,
         /^http:\/\/localhost:\d+\/oauth\/callback$/,
@@ -89,6 +100,7 @@ export class MyStack extends Stack {
     });
 
     new CfnOutput(this, 'ProxyUrl', { value: proxy.proxyUrl });
+    new CfnOutput(this, 'McpUrl', { value: proxy.mcpUrl });
   }
 }
 ```
@@ -106,14 +118,16 @@ A working example lives under [`examples/basic`](./examples/basic).
 | `userPool` | `cognito.IUserPool` | yes | Existing User Pool. |
 | `userPoolClient` | `cognito.IUserPoolClient` | yes | Confidential App Client (must have a secret). |
 | `cognitoDomain` | `cognito.UserPoolDomain` | yes | Hosted UI domain attached to the User Pool. |
-| `resourceUri` | `string` | yes | URL of the protected resource (e.g. AgentCore Gateway MCP endpoint). |
+| `upstreamUrl` | `string` | yes | Full URL of the upstream MCP server (e.g. AgentCore Gateway endpoint). The `/mcp` route forwards to this URL. |
 | `allowedRedirectPatterns` | `RegExp[]` | no | Patterns each registered `redirect_uri` must match. Empty = reject all. |
 | `cors` | `CorsOptions \| false` | no | CORS preflight config. Defaults to `allowOrigins: ['*']`, headers `authorization, content-type, mcp-protocol-version`, maxAge 10min. Pass `false` to disable. |
 | `throttling` | `ThrottlingOptions` | no | Stage-level throttling. Defaults to `rateLimit: 50`, `burstLimit: 100`. |
 | `reservedConcurrentExecutions` | `number` | no | Reserved concurrency applied to every Lambda. |
-| `lambdaEnvironment` | `Record<string, string>` | no | Extra env vars merged into all four Lambdas. |
+| `lambdaEnvironment` | `Record<string, string>` | no | Extra env vars merged into all Lambdas. |
 | `logRetention` | `logs.RetentionDays` | no | Defaults to `ONE_WEEK`. |
 | `removalPolicy` | `RemovalPolicy` | no | Applied to the Secrets Manager secret and Lambda log groups. Defaults to `DESTROY`. |
+| `mcpProxyTimeout` | `Duration` | no | Timeout for the `/mcp` proxy Lambda. Defaults to 29 seconds (API Gateway HTTP API integration limit). |
+| `mcpProxyMemorySize` | `number` | no | Memory size for the `/mcp` proxy Lambda. Defaults to 512 MB. |
 
 #### Outputs
 
@@ -121,6 +135,7 @@ A working example lives under [`examples/basic`](./examples/basic).
 | --- | --- |
 | `httpApi` | The underlying `apigatewayv2.HttpApi` (for adding custom domains, etc.). |
 | `proxyUrl` | Base URL of the HTTP API. |
+| `mcpUrl` | Full URL of the `/mcp` proxy endpoint (what MCP clients should be pointed at). |
 | `metadataUrl` | Full URL of the protected-resource metadata. |
 | `authServerMetadataUrl` | Full URL of the authorization-server metadata. |
 | `tokenEndpoint` | Token endpoint URL. |
@@ -139,7 +154,7 @@ authorizerConfiguration: {
 }
 ```
 
-The proxy only smooths the OAuth dance for clients. JWT verification stays between the MCP client → Gateway → Cognito JWKS.
+Pass the Gateway URL to the construct as `upstreamUrl`, and point MCP clients at `proxy.mcpUrl`. The proxy forwards requests through to the Gateway and rewrites `resource_metadata` in the upstream `WWW-Authenticate` header so clients discover the proxy's protected-resource metadata. JWT verification still happens between Gateway → Cognito JWKS.
 
 ## Cognito setup checklist
 
