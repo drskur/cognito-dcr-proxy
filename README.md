@@ -87,6 +87,7 @@ export class MyStack extends Stack {
           'http://localhost:33418/callback',
           'http://localhost:6274/oauth/callback',
           'http://127.0.0.1:49153',
+          'https://claude.ai/api/mcp/auth_callback',
         ],
       },
     });
