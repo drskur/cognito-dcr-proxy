@@ -5,14 +5,10 @@ const COGNITO_HOSTED_UI_BASE = process.env.COGNITO_HOSTED_UI_BASE!;
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const params = new URLSearchParams(event.rawQueryString ?? '');
 
-  console.log('[authorize] incoming params', {
-    keys: Array.from(params.keys()).sort(),
+  console.log('[authorize]', {
     scope: params.get('scope'),
     redirect_uri: params.get('redirect_uri'),
-    response_type: params.get('response_type'),
-    client_id: params.get('client_id'),
-    resource: params.get('resource'),
-    code_challenge_method: params.get('code_challenge_method'),
+    has_resource: params.has('resource'),
   });
 
   // RFC 8707 `resource` parameter binds the access token's `aud` claim to

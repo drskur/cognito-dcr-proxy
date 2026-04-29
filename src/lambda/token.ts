@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import type { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import {
   SecretsManagerClient,
@@ -43,15 +42,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   const params = new URLSearchParams(rawBody);
 
-  const incomingKeys = Array.from(params.keys()).sort();
-  console.log('[token] incoming params', {
-    keys: incomingKeys,
-    grant_type: params.get('grant_type'),
-    has_code_verifier: params.has('code_verifier'),
-    redirect_uri: params.get('redirect_uri'),
-    client_id_in: params.get('client_id'),
-  });
-
   // Always force the real Cognito client_id and inject the server-side secret.
   // DCR returned the same client_id to every caller, but we re-assert here
   // to keep client_id/secret consistent regardless of what the caller sent.
@@ -62,22 +52,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   // and Cognito has been observed to reject the exchange when present.
   params.delete('resource');
 
-  const code = params.get('code') ?? '';
-  const verifier = params.get('code_verifier') ?? '';
-  console.log('[token] forwarding to cognito', {
-    endpoint: `${COGNITO_HOSTED_UI_BASE}/oauth2/token`,
-    keys: Array.from(params.keys()).sort(),
-    has_client_secret: params.has('client_secret'),
-    client_id_last4: COGNITO_CLIENT_ID.slice(-4),
-    code_prefix: code.slice(0, 8),
-    code_length: code.length,
-    verifier_length: verifier.length,
-    verifier_sha256: verifier
-      ? createHash('sha256').update(verifier).digest('base64url')
-      : null,
-    redirect_uri: params.get('redirect_uri'),
-  });
-
   const res = await fetch(`${COGNITO_HOSTED_UI_BASE}/oauth2/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -85,12 +59,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   });
 
   const responseBody = await res.text();
-  console.log('[token] cognito response', {
+  console.log('[token]', {
+    grant_type: params.get('grant_type'),
     status: res.status,
-    body: responseBody,
-    errorType: res.headers.get('x-amzn-errortype'),
-    requestId: res.headers.get('x-amzn-requestid'),
-    wwwAuthenticate: res.headers.get('www-authenticate'),
+    ...(res.ok ? {} : { body: responseBody }),
   });
 
   return {
