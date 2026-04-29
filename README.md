@@ -70,7 +70,12 @@ export class MyStack extends Stack {
       generateSecret: true, // confidential client — required
       oAuth: {
         flows: { authorizationCodeGrant: true },
-        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.PROFILE, cognito.OAuthScope.EMAIL],
+        scopes: [
+          cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.PROFILE,
+          cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.PHONE,
+        ],
         // Cognito enforces exact-match callback URLs. Register every redirect
         // URI an MCP client may use, e.g.:
         //   - Claude Code:    http://localhost:33418/callback
