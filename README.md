@@ -1,5 +1,8 @@
 # @drskur/dcr-proxy
 
+[![npm version](https://img.shields.io/npm/v/@drskur/dcr-proxy.svg)](https://www.npmjs.com/package/@drskur/dcr-proxy)
+[![license](https://img.shields.io/npm/l/@drskur/dcr-proxy.svg)](./LICENSE)
+
 OAuth Dynamic Client Registration (DCR) proxy for Amazon Cognito, packaged as an AWS CDK construct.
 
 Lets MCP clients (Claude Code, Kiro CLI, MCP Inspector, ...) authenticate against an Amazon Cognito User Pool while:
